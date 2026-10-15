@@ -1,0 +1,12 @@
+deepagents
+langchain-ollama
+langchain-openrouter
+pydantic>=2
+typer[all]
+rich
+fastapi
+uvicorn[standard]
+Pillow
+imagehash
+pygetwindow
+pytest
