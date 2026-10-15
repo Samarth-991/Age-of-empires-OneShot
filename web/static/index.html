@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AoE2 Coaching Agent</title>
+  <style>
+    :root {
+      --bg: #0e1014;
+      --panel: #171a21;
+      --panel-2: #1e222b;
+      --border: #2a2f3a;
+      --text: #e8eaee;
+      --muted: #8e97a6;
+      --accent: #4ea1ff;
+      --gold: #e9c46a;
+      --green: #5fd08a;
+      --red: #ff6b6b;
+      --yellow: #ffd166;
+      --purple: #c792ea;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+    button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; font-weight: 600; }
+
+    /* ---------------- Header ---------------- */
+    header {
+      display: flex; align-items: center; gap: 18px;
+      padding: 10px 20px;
+      background: linear-gradient(90deg, #10141b, #181c24);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 16px; margin: 0; white-space: nowrap; }
+    header .matchup { color: var(--muted); font-size: 13px; white-space: nowrap; }
+    header .matchup b { color: var(--text); }
+    header .spacer { flex: 1; }
+    .pill {
+      font-size: 12px; padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+    }
+    .pill.live { color: var(--green); border-color: var(--green); }
+    .pill.analyzing { color: var(--yellow); border-color: var(--yellow); }
+    .btn-stop { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 6px 14px; font-size: 13px; }
+    .btn-stop:hover { background: var(--red); color: #2a0808; }
+    /* pipeline stepper */
+    .pipeline { display: none; align-items: center; gap: 6px; font-size: 12px; }
+    .step {
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+      color: var(--muted); white-space: nowrap; transition: all .2s;
+    }
+    .step.active { color: #0b1a2c; background: var(--accent); border-color: var(--accent); }
+    .step.active.nimble { background: var(--green); border-color: var(--green); }
+    .step .t { opacity: .8; margin-left: 4px; }
+    .arrow { color: var(--border); }
+
+    /* ---------------- Setup ---------------- */
+    #setup { flex: 1; display: flex; align-items: center; justify-content: center; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 30px 34px; width: 500px;
+      box-shadow: 0 16px 50px rgba(0,0,0,0.45);
+    }
+    .card h2 { margin: 0 0 6px; font-size: 20px; }
+    .hint { color: var(--muted); font-size: 13px; margin: 0 0 18px; line-height: 1.5; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+    select, input[type=text] {
+      width: 100%; padding: 10px 12px; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+      font-family: inherit; font-size: 14px;
+    }
+    select:focus, input:focus { outline: none; border-color: var(--accent); }
+    .row { display: flex; gap: 14px; }
+    .row > div { flex: 1; }
+    .check-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; font-size: 13px; color: var(--muted); cursor: pointer; }
+    .check-row input { accent-color: var(--accent); margin-top: 2px; }
+    .btn-primary { background: var(--accent); color: #06223f; width: 100%; margin-top: 22px; padding: 12px; font-size: 15px; }
+    .btn-primary:hover { background: #6cb4ff; }
+
+    /* ---------------- Dashboard ---------------- */
+    #dashboard { display: none; flex: 1; flex-direction: column; min-height: 0; }
+    .error-banner { background: #3a1414; color: var(--red); padding: 8px 20px; font-size: 13px; border-bottom: 1px solid var(--red); }
+
+    /* always-visible priority strip */
+    .priority-strip {
+      display: flex; align-items: center; gap: 16px;
+      margin: 14px 20px 0; padding: 14px 18px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-left: 4px solid var(--gold); border-radius: var(--radius);
+    }
+    .priority-strip.threat { border-left-color: var(--red); }
+    .priority-strip .label { color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+    .priority-strip .text { font-size: 19px; font-weight: 600; line-height: 1.35; margin-top: 2px; }
+    .priority-strip .main { flex: 1; min-width: 0; }
+    .priority-strip .when { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; }
+    .alarm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 20px 0; }
+    .alarm-chip {
+      font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+      color: var(--red); background: rgba(255,107,107,.1); border: 1px solid rgba(255,107,107,.5);
+    }
+
+    /* tabs */
+    .tabs { display: flex; gap: 4px; padding: 14px 20px 0; border-bottom: 1px solid var(--border); }
+    .tab {
+      position: relative; background: transparent; color: var(--muted);
+      padding: 10px 16px; font-size: 14px; border-radius: 8px 8px 0 0;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); background: var(--panel); }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); background: var(--panel); }
+    .tab kbd { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px; font-family: inherit; }
+    .tab .dot { display: none; position: absolute; top: 8px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+    .tab.unseen .dot { display: block; }
+    .tab-body { flex: 1; overflow-y: auto; padding: 18px 20px 30px; }
+    .tab-panel { display: none; max-width: 1100px; }
+    .tab-panel.active { display: block; }
+
+    /* generic */
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; }
+    .panel h3 { margin: 0 0 12px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 600; display: flex; justify-content: space-between; }
+    .panel h3 .ts { text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border); color: var(--muted); }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } .pipeline { display: none !important; } }
+
+    /* coach tab */
+    .rec {
+      display: grid; grid-template-columns: 84px 1fr auto 110px 42px; align-items: center;
+      gap: 12px; font-size: 14px; padding: 9px 4px; border-bottom: 1px solid var(--panel-2);
+    }
+    .rec:last-child { border-bottom: none; }
+    .kind { font-size: 11px; text-transform: uppercase; text-align: center; padding: 3px 6px; border-radius: 5px; border: 1px solid var(--border); }
+    .kind-unit { color: var(--accent); border-color: var(--accent); }
+    .kind-building { color: var(--gold); border-color: var(--gold); }
+    .kind-tech { color: var(--purple); border-color: var(--purple); }
+    .kind-age { color: var(--green); border-color: var(--green); }
+    .rec .cost { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .rec .cost.short { color: var(--red); }
+    .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; background: var(--green); }
+    .soon .bar > span { background: var(--yellow); }
+    .pct { color: var(--muted); font-size: 12px; text-align: right; }
+    .escalate { color: var(--yellow); border-color: var(--yellow); }
+    .inline-error { color: var(--red); font-size: 13px; margin-top: 10px; }
+
+    /* strategy tab */
+    .strategy-text { white-space: pre-wrap; line-height: 1.65; font-size: 15px; margin: 0; font-family: inherit; }
+    .strategy-text strong { color: var(--gold); }
+    .strategy-text h4 { color: var(--accent); margin: 0 0 6px; font-size: 16px; }
+    details.hist { border-top: 1px solid var(--panel-2); padding: 8px 0; }
+    details.hist summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+    details.hist .strategy-text { font-size: 13px; margin-top: 8px; color: #cfd4dc; }
+    .strategy-age { color: var(--accent); font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+    .strategy-priority {
+      font-size: 17px; font-weight: 600; line-height: 1.45; padding: 12px 14px; margin-bottom: 14px;
+      border-left: 3px solid var(--gold); background: var(--panel-2); border-radius: 8px;
+    }
+    .strategy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) { .strategy-grid { grid-template-columns: 1fr; } }
+    .strategy-section {
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    }
+    .strategy-section h4 {
+      margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+    }
+    .strategy-section.economy h4 { color: var(--green); }
+    .strategy-section.military h4 { color: var(--red); }
+    .strategy-section.scouting h4 { color: var(--accent); }
+    .strategy-section.tech h4 { color: var(--purple); }
+    .strategy-section ul { margin: 0; padding-left: 18px; line-height: 1.55; font-size: 14px; }
+    .strategy-section li { margin-bottom: 4px; }
+    .strategy-foot { margin-top: 14px; font-size: 14px; line-height: 1.55; color: #cfd4dc; }
+    .strategy-foot strong { color: var(--gold); }
+
+    /* game state tab */
+    .res-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 900px) { .res-cards { grid-template-columns: repeat(3, 1fr); } }
+    .res-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .res-card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+    .res-card .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .res-card.food .v { color: #ff8a80; }
+    .res-card.wood .v { color: var(--green); }
+    .res-card.gold .v { color: var(--gold); }
+    .res-card.stone .v { color: #b8c0cc; }
+    .unit { display: flex; justify-content: space-between; font-size: 14px; padding: 5px 0; border-bottom: 1px solid var(--panel-2); }
+    .unit:last-child { border-bottom: none; }
+    .unit.self .n { color: var(--accent); }
+    .unit.enemy .n { color: var(--red); }
+    .threat-none { color: var(--green); border-color: var(--green); }
+    .threat-low { color: var(--yellow); border-color: var(--yellow); }
+    .threat-high { color: var(--red); border-color: var(--red); }
+
+    /* activity tab */
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 900px) { .stat-cards { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .stat-card .k { color: var(--muted); font-size: 12px; }
+    .stat-card .v { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .stat-card .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .stat-card.bad .v { color: var(--red); }
+    .log-row { display: grid; grid-template-columns: 70px 90px 1fr; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--panel-2); }
+    .log-row .at { color: var(--muted); }
+    .log-row .k { font-size: 11px; text-transform: uppercase; }
+    .k-snapshot { color: var(--accent); }
+    .k-nimble { color: var(--green); }
+    .k-strategist { color: var(--purple); }
+    .k-error { color: var(--red); }
+    .k-skip { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AoE2 Coach</h1>
+    <span class="matchup" id="matchup-label">read-only strategy advisor</span>
+    <div class="pipeline" id="pipeline">
+      <span class="step" data-stage="capturing">Capture</span><span class="arrow">›</span>
+      <span class="step" data-stage="reading_screen">Read screen</span><span class="arrow">›</span>
+      <span class="step nimble" data-stage="nimble">Nimble</span><span class="arrow">›</span>
+      <span class="step" data-stage="waiting">Wait</span>
+    </div>
+    <span class="spacer"></span>
+    <span class="pill" id="status-pill">offline</span>
+    <button class="btn-stop" id="stop-btn" style="display:none;">Stop</button>
+  </header>
+
+  <!-- ============ SETUP ============ -->
+  <section id="setup">
+    <div class="card">
+      <h2>Start a coaching session</h2>
+      <p class="hint">Capture and coaching start automatically when the session begins. Times are shown in IST. The agent never controls the game.</p>
+      <div class="row">
+        <div>
+          <label for="player-civ">Your civilization</label>
+          <select id="player-civ"></select>
+        </div>
+        <div>
+          <label for="opponent-civ">Opponent civilization</label>
+          <select id="opponent-civ"></select>
+        </div>
+      </div>
+      <label for="exe-path">Game executable (optional)</label>
+      <input type="text" id="exe-path" placeholder="Leave blank to watch the current screen" />
+      <label class="check-row" for="use-nimble">
+        <input type="checkbox" id="use-nimble" checked />
+        <span>Fast coach (Nimble) — answers right after every screen read with what to build, train and research</span>
+      </label>
+      <button class="btn-primary" id="start-btn">Start Session</button>
+      <p class="hint" id="setup-msg" style="margin-top:14px;"></p>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section id="dashboard">
+    <div class="error-banner" id="error-banner" style="display:none;"></div>
+
+    <div class="priority-strip" id="priority-strip">
+      <div class="main">
+        <div class="label">Do this now</div>
+        <div class="text" id="priority-text">Waiting for the first screen read…</div>
+      </div>
+      <div class="when" id="priority-when"></div>
+    </div>
+    <div class="alarm-chips" id="alarm-chips"></div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="coach">Coach<kbd>1</kbd><span class="dot"></span></button>
+      <button class="tab" data-tab="strategy">Strategy<kbd>2</kbd><span class="dot"></span></button>
+      <button class="tab" data-tab="state">Game State<kbd>3</kbd><span class="dot"></span></button>
+      <button class="tab" data-tab="activity">Activity<kbd>4</kbd><span class="dot"></span></button>
+    </nav>
+
+    <div class="tab-body">
+      <div class="tab-panel active" id="tab-coach"></div>
+      <div class="tab-panel" id="tab-strategy"></div>
+      <div class="tab-panel" id="tab-state"></div>
+      <div class="tab-panel" id="tab-activity"></div>
+    </div>
+  </section>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const TABS = ["coach", "strategy", "state", "activity"];
+    let activeTab = location.hash.slice(1) || localStorage.getItem("aoe2-tab") || "coach";
+    let lastState = null;
+    const seen = {};   // tab -> content key last seen while active
+
+    // ---------------- Setup ----------------
+    async function loadCivs() {
+      const { civs } = await (await fetch("/api/civs")).json();
+      const pSel = $("player-civ"), oSel = $("opponent-civ");
+      for (const c of civs) { pSel.add(new Option(c, c)); oSel.add(new Option(c, c)); }
+      pSel.value = localStorage.getItem("aoe2-player") || (civs.includes("Britons") ? "Britons" : civs[0]);
+      oSel.value = localStorage.getItem("aoe2-opponent") || (civs.includes("Teutons") ? "Teutons" : civs[1] || civs[0]);
+    }
+
+    async function startSession() {
+      $("setup-msg").textContent = "Starting…";
+      const body = {
+        player_civ: $("player-civ").value,
+        opponent_civ: $("opponent-civ").value,
+        exe_path: $("exe-path").value.trim(),
+        use_nimble: $("use-nimble").checked,
+      };
+      localStorage.setItem("aoe2-player", body.player_civ);
+      localStorage.setItem("aoe2-opponent", body.opponent_civ);
+      const data = await (await fetch("/api/start", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      })).json();
+      $("setup-msg").textContent = data.message;
+      if (data.ok) showDashboard(body.player_civ, body.opponent_civ);
+    }
+
+    async function stopSession() {
+      await fetch("/api/stop", { method: "POST" });
+      location.reload();
+    }
+
+    function showDashboard(player, opp) {
+      $("setup").style.display = "none";
+      $("dashboard").style.display = "flex";
+      $("stop-btn").style.display = "inline-block";
+      $("pipeline").style.display = "flex";
+      $("matchup-label").innerHTML = `<b>${esc(player)}</b> vs <b>${esc(opp)}</b>`;
+      selectTab(activeTab);
+      const es = new EventSource("/api/stream");
+      es.onmessage = (e) => { try { render(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+    }
+
+    // ---------------- Tabs ----------------
+    function selectTab(name) {
+      activeTab = TABS.includes(name) ? name : "coach";
+      localStorage.setItem("aoe2-tab", activeTab);
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === activeTab));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${activeTab}`));
+      if (lastState) markSeen(lastState);
+    }
+
+    // Each tab's "content key" changes when there is something new to look at.
+    const contentKey = (s) => ({
+      coach: s.nimble && s.nimble.generated_at,
+      strategy: s.strategy_updated_at,
+      state: s.snapshot_updated_at,
+      activity: null,
+    });
+
+    function markSeen(s) {
+      const keys = contentKey(s);
+      for (const t of TABS) {
+        if (t === activeTab || !(t in seen)) seen[t] = keys[t];
+        document.querySelector(`.tab[data-tab="${t}"]`)
+          .classList.toggle("unseen", keys[t] != null && seen[t] !== keys[t]);
+      }
+    }
+
+    // ---------------- Render ----------------
+    function render(s) {
+      lastState = s;
+      renderHeader(s);
+      renderPriority(s);
+      $("tab-coach").innerHTML = coachTab(s);
+      renderStrategyTab(s);
+      $("tab-state").innerHTML = stateTab(s.snapshot, s.snapshot_updated_at, s);
+      $("tab-activity").innerHTML = activityTab(s);
+      markSeen(s);
+    }
+
+    function tzSuffix(s) {
+      return s.timezone_label ? ` ${s.timezone_label}` : "";
+    }
+
+    function renderHeader(s) {
+      const pill = $("status-pill");
+      if (!s.running) { pill.textContent = "stopped"; pill.className = "pill"; }
+      else if (s.status && s.status !== "idle") { pill.textContent = "Strategist: " + s.status; pill.className = "pill analyzing"; }
+      else { pill.textContent = "session active"; pill.className = "pill live"; }
+
+      const banner = $("error-banner");
+      banner.style.display = s.error ? "block" : "none";
+      if (s.error) banner.textContent = "Error: " + s.error;
+
+      const elapsed = s.stage_since ? Math.max(0, Math.round(Date.now() / 1000 - s.stage_since)) : null;
+      document.querySelectorAll(".step").forEach(el => {
+        const on = s.running && el.dataset.stage === s.stage;
+        el.classList.toggle("active", on);
+        el.dataset.label = el.dataset.label || el.textContent;
+        el.innerHTML = esc(el.dataset.label) + (on && elapsed != null ? `<span class="t">${elapsed}s</span>` : "");
+      });
+    }
+
+    function renderPriority(s) {
+      const n = s.nimble;
+      const snap = s.snapshot;
+      const strip = $("priority-strip");
+      let text = "Waiting for the first screen read…", when = "";
+      if (n) {
+        text = n.priority;
+        when = `Nimble · ${n.generated_at}${tzSuffix(s)}<br>${(n.latency_ms / 1000).toFixed(1)}s`;
+      } else if (!s.nimble_enabled && s.strategy_structured?.priority) {
+        text = s.strategy_structured.priority;
+        when = `Strategist · ${s.strategy_updated_at}${tzSuffix(s)}`;
+      } else if (!s.nimble_enabled && s.strategy_updated_at) {
+        const m = s.strategy.match(/\*\*Priority:\*\*\s*(.+)/);
+        if (m) { text = m[1]; when = `Strategist · ${s.strategy_updated_at}${tzSuffix(s)}`; }
+      } else if (snap) {
+        text = s.nimble_enabled ? "Nimble is thinking…" : "Strategist is thinking…";
+      }
+      $("priority-text").textContent = text;
+      $("priority-when").innerHTML = when;
+      strip.classList.toggle("threat", !!(snap && snap.threat_level === "high"));
+
+      $("alarm-chips").innerHTML = (s.alarms || []).map(a => `<span class="alarm-chip">⚠ ${esc(a)}</span>`).join("");
+    }
+
+    function coachTab(s) {
+      if (!s.nimble_enabled) {
+        return `<div class="panel"><div class="empty">Fast coach is off for this session — see the Strategy tab.</div></div>`;
+      }
+      const n = s.nimble;
+      const err = s.nimble_error ? `<div class="inline-error">⚠ ${esc(s.nimble_error)}</div>` : "";
+      if (!n) {
+        const waiting = s.snapshot ? "Nimble is answering the first snapshot…" : "Waiting for the first screen read…";
+        return `<div class="panel"><div class="empty">${waiting}</div>${err}</div>`;
+      }
+      const recRow = (r) => {
+        const pct = Math.round((r.verdict === "now" ? r.p_now : r.p_soon) * 100);
+        const short = r.affordability.startsWith("short");
+        return `<div class="rec ${r.verdict}" title="${esc(r.text)}">
+          <span class="kind kind-${esc(r.kind)}">${esc(r.kind)}</span>
+          <span>${esc(r.verb)} <b>${esc(r.name)}</b>${r.prereq && r.kind !== "building" ? ` <span class="cost">${esc(r.prereq)}</span>` : ""}</span>
+          <span class="cost${short ? " short" : ""}">${esc(r.cost)}${short ? " · " + esc(r.affordability) : ""}</span>
+          <span class="bar"><span style="width:${pct}%"></span></span>
+          <span class="pct">${pct}%</span>
+        </div>`;
+      };
+      const list = (verdict) => n.recommendations.filter(r => r.verdict === verdict).map(recRow).join("")
+        || `<div class="empty">Nothing here right now.</div>`;
+      const meta = [
+        n.focus && `Focus: ${n.focus}`,
+        n.gather && `Gather: ${n.gather}`,
+        n.counter && `Counter with: ${n.counter}`,
+        n.military_urgency_label && `Military: ${n.military_urgency_label}`,
+      ].filter(Boolean).map(m => `<span class="badge">${esc(m)}</span>`).join("");
+      const escalate = n.escalate ? `<span class="badge escalate">Deep analysis requested</span>` : "";
+
+      return `
+        <div class="panel">
+          <h3>Next actions <span class="ts">${esc(n.age)} Age · ${esc(n.generated_at)}${tzSuffix(s)}</span></h3>
+          <ol style="margin:0; padding-left:20px; line-height:1.8; font-size:15px;">
+            ${n.actions.map(a => `<li>${esc(a)}</li>`).join("")}
+          </ol>
+          <div class="badges" style="margin-top:12px;">${meta}${escalate}</div>
+          ${err}
+        </div>
+        <div class="grid-2">
+          <div class="panel"><h3>Do now</h3>${list("now")}</div>
+          <div class="panel soon"><h3>Coming up soon</h3>${list("soon")}</div>
+        </div>
+        <div class="panel"><h3>Why</h3>${n.rationale ? `<div style="font-size:14px; line-height:1.55; color:#cfd4dc;">${esc(n.rationale)}</div>` : ""}
+          <div class="badges" style="margin-top:10px;"><span class="badge mono">${esc(n.model)}</span>
+          <span class="badge">${n.question_count} questions · ${(n.latency_ms / 1000).toFixed(1)}s</span></div>
+        </div>`;
+    }
+
+    function formatStrategy(text) {
+      return esc(text.trim())
+        .replace(/^##\s?(.+)\n+/gm, "<h4>$1</h4>")
+        .replace(/\n{3,}/g, "\n\n")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    }
+
+    const STRATEGY_SECTIONS = [
+      ["economy", "Economy", "economy"],
+      ["military", "Military", "military"],
+      ["scouting", "Scouting", "scouting"],
+      ["tech_and_buildings", "Tech & buildings", "tech"],
+    ];
+
+    function renderStrategyStructured(st) {
+      if (!st) return "";
+      const blocks = STRATEGY_SECTIONS.map(([key, label, cls]) => {
+        const items = st[key];
+        if (!items || !items.length) return "";
+        return `<div class="strategy-section ${cls}"><h4>${label}</h4><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`;
+      }).join("");
+      const foot = [
+        st.matchup_note ? `<p class="strategy-foot"><strong>Matchup:</strong> ${esc(st.matchup_note)}</p>` : "",
+      ].join("");
+      return `
+        <div class="strategy-age">${esc(st.age)} Age</div>
+        <div class="strategy-priority">${esc(st.priority)}</div>
+        <div class="strategy-grid">${blocks || `<div class="empty">No category bullets in this update.</div>`}</div>
+        ${foot}`;
+    }
+
+    function renderStrategyBlock(s, st, textFallback) {
+      if (st) return renderStrategyStructured(st);
+      return `<pre class="strategy-text">${formatStrategy(textFallback || s.strategy)}</pre>`;
+    }
+
+    let renderedStrategyKey = null;
+    function renderStrategyTab(s) {
+      const key = `${s.strategy_updated_at}|${s.status}|${JSON.stringify(s.strategy_structured)}`;
+      if (key === renderedStrategyKey) return;
+      renderedStrategyKey = key;
+      const thinking = s.status && s.status !== "idle"
+        ? `<span class="badge analyzing" style="color:var(--yellow);border-color:var(--yellow);">${esc(s.status)}</span>` : "";
+      const history = (s.strategy_history || []).slice(1).map((h) =>
+        `<details class="hist"><summary>Update at ${esc(h.at)}${tzSuffix(s)}</summary>${renderStrategyBlock(s, h.structured, h.text)}</details>`
+      ).join("");
+      $("tab-strategy").innerHTML = `
+        <div class="panel">
+          <h3>Strategist <span class="ts">${esc(s.strategy_updated_at || "—")}${tzSuffix(s)} ${thinking}</span></h3>
+          ${renderStrategyBlock(s, s.strategy_structured, s.strategy)}
+        </div>
+        ${history ? `<div class="panel"><h3>Earlier updates</h3>${history}</div>` : ""}`;
+    }
+
+    function stateTab(snap, at, s) {
+      if (!snap) return `<div class="panel"><div class="empty">Waiting for the first screen read…</div></div>`;
+      const r = snap.resources || {};
+      const threat = (snap.threat_level || "none").toLowerCase();
+      const v = (x) => x ?? "?";
+      const card = (cls, k, val) => `<div class="res-card ${cls}"><div class="k">${k}</div><div class="v mono">${val}</div></div>`;
+      const units = (owner) => (snap.visible_units || []).filter(u => u.owner === owner)
+        .map(u => `<div class="unit ${u.owner}"><span>${esc(u.label)}</span><span class="n mono">${u.approx_count}×</span></div>`).join("")
+        || `<div class="empty">None visible</div>`;
+      const buildings = (snap.visible_buildings || []).map(b => `<span class="badge">${esc(b)}</span>`).join("")
+        || `<div class="empty">None visible</div>`;
+      return `
+        <div class="badges" style="margin-bottom:12px;">
+          <span class="badge">${esc(snap.age)} Age</span>
+          <span class="badge threat-${threat}">Threat: ${threat.toUpperCase()}</span>
+          ${snap.idle_villagers_visible ? `<span class="badge threat-high">Idle villagers</span>` : ""}
+          <span class="badge">Seen at ${esc(at || "—")}${tzSuffix(s)}</span>
+        </div>
+        <div class="res-cards">
+          ${card("food", "Food", v(r.food))}${card("wood", "Wood", v(r.wood))}
+          ${card("gold", "Gold", v(r.gold))}${card("stone", "Stone", v(r.stone))}
+          ${card("", "Population", `${v(snap.population)}<span style="color:var(--muted);font-size:15px;">/${v(snap.pop_cap)}</span>`)}
+          ${card("", "Headroom", snap.population != null && snap.pop_cap != null ? snap.pop_cap - snap.population : "?")}
+        </div>
+        <div class="grid-2">
+          <div class="panel"><h3>Your units</h3>${units("self")}</div>
+          <div class="panel"><h3>Enemy units</h3>${units("enemy")}</div>
+        </div>
+        <div class="panel"><h3>Buildings</h3><div class="badges">${buildings}</div></div>
+        <div class="panel"><h3>Notes</h3><div style="font-size:14px;">${esc(snap.notes || "—")}</div></div>`;
+    }
+
+    function activityTab(s) {
+      const st = s.stats || {};
+      const fmt = (x, unit) => x == null ? "—" : `${x}${unit}`;
+      const failRate = st.frames ? Math.round(100 * st.vlm_failures / Math.max(1, st.frames - st.skipped)) : 0;
+      const cards = `
+        <div class="stat-cards">
+          <div class="stat-card"><div class="k">Screen read (VLM)</div><div class="v mono">${fmt(st.last_vlm_secs, "s")}</div><div class="s">capture ${fmt(st.last_capture_secs, "s")}</div></div>
+          <div class="stat-card"><div class="k">Nimble answer</div><div class="v mono">${st.last_nimble_ms == null ? "—" : (st.last_nimble_ms / 1000).toFixed(1) + "s"}</div><div class="s">runs right after each snapshot</div></div>
+          <div class="stat-card"><div class="k">Snapshots</div><div class="v mono">${st.snapshots}</div><div class="s">${st.frames} frames · ${st.skipped} unchanged</div></div>
+          <div class="stat-card ${st.vlm_failures ? "bad" : ""}"><div class="k">Failed screen reads</div><div class="v mono">${st.vlm_failures}</div><div class="s">${failRate}% of frames sent</div></div>
+        </div>`;
+      const rows = (s.activity || []).map(a =>
+        `<div class="log-row"><span class="at mono">${esc(a.at)}${tzSuffix(s)}</span><span class="k k-${esc(a.kind)}">${esc(a.kind)}</span><span>${esc(a.text)}</span></div>`
+      ).join("") || `<div class="empty">No activity yet.</div>`;
+      return `${cards}<div class="panel"><h3>Recent activity</h3>${rows}</div>`;
+    }
+
+    // ---------------- Wire up ----------------
+    $("start-btn").onclick = startSession;
+    $("stop-btn").onclick = stopSession;
+    document.querySelectorAll(".tab").forEach(t => t.onclick = () => selectTab(t.dataset.tab));
+    document.addEventListener("keydown", (e) => {
+      if (e.target.matches("input, select, textarea")) return;
+      const i = Number(e.key) - 1;
+      if (i >= 0 && i < TABS.length && $("dashboard").style.display !== "none") selectTab(TABS[i]);
+    });
+    // Live elapsed counter on the active pipeline step between SSE pushes.
+    setInterval(() => { if (lastState) renderHeader(lastState); }, 1000);
+
+    loadCivs();
+    fetch("/api/state").then(r => r.json()).then(s => { if (s.running) showDashboard(s.player_civ, s.opponent_civ); });
+  </script>
+</body>
+</html>
